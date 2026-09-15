@@ -1,3 +1,4 @@
+import {vehicleMaterials,bevelGeometry,sportWheel,createVehicleEnvironment} from './vehicle-finish.js';
 import {loadBindings,createKeyboardState,formatKeys} from './keyboard-controls.js';
 import {mountKeyboardSettings} from './keyboard-settings.js';
 import {setupLanguage,tr} from './localization.js';
@@ -220,30 +221,34 @@ scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({size:1.5,color:0x7d
 let craftIndex=4;
 function makeCraft(color=0xffb24c,scale=1){
   const g=new THREE.Group(),model=new THREE.Group();g.add(model);
-  const paint=new THREE.MeshPhysicalMaterial({color,metalness:.25,roughness:.25,clearcoat:1,clearcoatRoughness:.14});paint.userData.craftColor=true;
-  const rubber=new THREE.MeshStandardMaterial({color:0x15222c,roughness:.88});
-  const metal=new THREE.MeshStandardMaterial({color:0xdee6eb,metalness:.65,roughness:.3});
-  const dark=new THREE.MeshStandardMaterial({color:0x263847,metalness:.3,roughness:.5});
-  function box(w,h,d,x,y,z,mat=paint){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);model.add(m);return m;}
+  const surfaces=vehicleMaterials(color),{paint,rubber,metal,dark,seat,glass,lens}=surfaces;
+  function box(w,h,d,x,y,z,mat=paint){const m=new THREE.Mesh(bevelGeometry(w,h,d,Math.min(.18,h*.22)),mat);m.position.set(x,y,z);model.add(m);return m;}
   function round(w,h,d,x,y,z,mat=paint){const m=new THREE.Mesh(new THREE.SphereGeometry(1,20,12),mat);m.scale.set(w,h,d);m.position.set(x,y,z);model.add(m);return m;}
   box(8.6,1.3,12,0,-1.8,0,dark);
-  round(4.9,1.65,6.8,0,-.65,.3);
-  round(4.7,1.25,3.7,0,-.4,4.4);
+  // Sculpted nose and side pods leave a real cockpit opening instead of a solid oval body.
+  function shell(outline,y,depth,mat=paint){const shape=new THREE.Shape();outline.forEach(([x,z],i)=>i?shape.lineTo(x,-z):shape.moveTo(x,-z));shape.closePath();const geo=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSegments:3,bevelSize:.28,bevelThickness:.22,steps:1});geo.rotateX(-Math.PI/2);const m=new THREE.Mesh(geo,mat);m.position.y=y;model.add(m);return m;}
+  shell([[-3.1,7.8],[-4.4,5.6],[-3.6,2.1],[3.6,2.1],[4.4,5.6],[3.1,7.8]],-.9,1.35);
+  shell([[-3.4,7.95],[-4.6,5.7],[-4,2],[4,2],[4.6,5.7],[3.4,7.95]],-1.28,.23,dark);
+  for(const side of [-1,1]){
+   box(1.7,1.25,6.6,side*3.85,-.35,-1.1);box(.2,.7,4.8,side*4.72,-.3,-1.4,dark);
+   for(let i=0;i<5;i++)box(.25,.08,.38,side*4.86,-.12,-2.8+i*.68,metal);
+   box(.14,.11,3.8,side*2.5,.71,4.7,metal);box(.6,.18,1.8,side*3.6,.75,3.3,dark);
+   box(.8,.18,.26,side*3.2,-.72,7.95,metal);
+  }
+  box(3,.22,2,0,.68,2.9,dark);for(let i=0;i<5;i++)box(2.6,.06,.12,0,.83,2.15+i*.36,metal);
   box(.6,.15,6.5,0,.77,4.7,metal);
   box(9.6,.7,1.0,0,-1.35,7.9,dark);
   const wheels=[],fins=[],engines=[],spoilers=[];
   for(const side of [-1,1]){
     for(const z of [-4.4,4.6]){
       const hub=new THREE.Group();hub.position.set(side*5.5,-1.4,z);model.add(hub);
-      const tire=new THREE.Mesh(new THREE.CylinderGeometry(2.15,2.15,1.7,24),rubber);tire.rotation.z=Math.PI/2;hub.add(tire);
-      const rim=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.2,1.78,12),metal);rim.rotation.z=Math.PI/2;hub.add(rim);
-      const cap=new THREE.Mesh(new THREE.CylinderGeometry(.48,.48,1.82,12),paint);cap.rotation.z=Math.PI/2;hub.add(cap);
+      const tire=sportWheel(surfaces,side);hub.add(tire,tire.userData.caliper);
       wheels.push({hub,tire,front:z>0});
     }
-    round(1,1.1,3.8,side*4,-.1,-1.2);
+    box(1.1,.24,4.4,side*4,.41,-1.2);
     spoilers.push(box(.28,3.8,.4,side*3.5,1.25,-5.8,dark));
     const end=box(.3,1.2,2.2,side*5.2,3,-5.8);fins.push(end);spoilers.push(end);
-    const lamp=new THREE.Mesh(new THREE.SphereGeometry(.48,12,8),new THREE.MeshBasicMaterial({color:0xd6fbff}));lamp.scale.set(1.8,.55,.6);lamp.position.set(side*3,.1,7);model.add(lamp);
+    const lamp=new THREE.Mesh(new THREE.SphereGeometry(.48,12,8),lens);lamp.scale.set(1.8,.55,.6);lamp.position.set(side*3,.1,7);model.add(lamp);
     box(1.5,.38,.3,side*3.4,-.25,-6.7,new THREE.MeshBasicMaterial({color:0xff6755}));
     const exhaust=new THREE.Mesh(new THREE.CylinderGeometry(.6,.72,1.7,12),metal);exhaust.rotation.x=Math.PI/2;exhaust.position.set(side*2.1,-1.4,-7);model.add(exhaust);
     const flameMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,
@@ -255,11 +260,17 @@ function makeCraft(color=0xffb24c,scale=1){
   spoilers.push(box(10.5,.5,2.4,0,2.6,-5.8));
   spoilers.push(box(6.5,.12,1.5,0,2.9,-5.8,metal));
   // Driver, seat, helmet and dark visor make the kart scale immediately legible.
-  box(3.5,2.3,3.7,0,.3,-1.7,dark);
-  round(1.5,1.7,1.2,0,2,-1.2,paint);
+  box(3.5,1,3.7,0,-.2,-1.7,seat);
+  box(3.25,3,.55,0,1,-3.15,seat);
+  for(const side of [-1,1]){box(.38,2.1,2.9,side*1.65,.3,-1.9,seat);box(.26,2.1,.1,side*.72,1.35,-2.82,paint);}
+  for(let i=0;i<6;i++)box(2.2,.035,.035,0,.5,-2.8+i*.42,dark);
+  round(1.5,1.7,1.2,0,2,-1.2,seat);
   round(1.85,1.8,1.8,0,4.3,-.8,new THREE.MeshPhysicalMaterial({color:0xf3f0e3,roughness:.24,clearcoat:1}));
   for(const side of [-1,1]){round(.4,.45,.28,side*1.65,4.3,-.3,metal);box(.18,1.6,.15,side*.65,2.1,.03,metal);round(.5,.45,.5,side*1.2,2,1.8,paint);}
-  round(1.6,.65,.8,0,4.4,.5,new THREE.MeshPhysicalMaterial({color:0x153147,metalness:.55,roughness:.12,clearcoat:1}));
+  round(1.6,.65,.8,0,4.4,.5,glass);
+  // Helmet band and rear vents remain readable from the chase camera.
+  for(const side of [-1,1]){box(.12,.44,1.2,side*.58,5.75,-.7,dark);box(.12,.25,.5,side*.55,4.5,-2.55,dark);}
+  const helmetBand=new THREE.Mesh(new THREE.TorusGeometry(1.68,.06,6,40),metal);helmetBand.rotation.x=Math.PI/2;helmetBand.position.set(0,3.83,-.8);model.add(helmetBand);
   const steering=new THREE.Mesh(new THREE.TorusGeometry(1.15,.16,8,16),dark);steering.rotation.x=-.65;steering.position.set(0,1.8,1.6);model.add(steering);
   for(const side of [-1,1])round(.48,.48,1.3,side*1.2,1.9,.7,dark);
   // Reusable body kits can be switched without rebuilding or leaking GPU resources.
@@ -317,7 +328,7 @@ function animateCraft(craft,time,power,boosting=false,drifting=false,steer=0){
     flame.material.uniforms.tint.value.setHex(craft===player&&state.miniTurbo>0&&state.nitro<=0?0xffad42:0x43cfff);
     flame.material.uniforms.time.value=time;flame.material.uniforms.power.value=power;
   });
-  craft.userData.wheels.forEach(w=>{w.hub.rotation.y=w.front?-steer*.35:0;w.tire.rotation.x=time*power*(craft.userData.fx?-8:18);});
+  craft.userData.wheels.forEach(w=>{w.hub.rotation.y=w.front?-steer*.35:0;w.tire.rotation.x=time*power*-8;});
 }
 const player=makeCraft(craftDefs[craftIndex].color,1); scene.add(player);
 
@@ -342,7 +353,7 @@ for(let i=0;i<30;i++){
 
 const ambientLight=new THREE.HemisphereLight(0xdbefff,0x525443,1.35);scene.add(ambientLight);
 const dir=new THREE.DirectionalLight(0xffe6c3,2.7);dir.position.set(500,900,-400);scene.add(dir);scene.add(dir.target);dir.castShadow=true;dir.shadow.mapSize.set(1024,1024);Object.assign(dir.shadow.camera,{left:-150,right:150,top:150,bottom:-150,near:1,far:650});dir.shadow.bias=-.0003;dir.shadow.normalBias=.3;
-const envCanvas=document.createElement('canvas');envCanvas.width=512;envCanvas.height=256;const envCtx=envCanvas.getContext('2d'),gradient=envCtx.createLinearGradient(0,0,0,256);gradient.addColorStop(0,'#86bce5');gradient.addColorStop(.45,'#e8f1f3');gradient.addColorStop(.6,'#989d90');gradient.addColorStop(1,'#3a4a56');envCtx.fillStyle=gradient;envCtx.fillRect(0,0,512,256);envCtx.fillStyle='#fff5db';envCtx.fillRect(90,50,65,25);const envTexture=new THREE.CanvasTexture(envCanvas);envTexture.mapping=THREE.EquirectangularReflectionMapping;envTexture.colorSpace=THREE.SRGBColorSpace;const pmrem=new THREE.PMREMGenerator(renderer);const envTarget=pmrem.fromEquirectangular(envTexture);scene.environment=envTarget.texture;pmrem.dispose();envTexture.dispose();
+const envTarget=createVehicleEnvironment(renderer);scene.environment=envTarget.texture;
 
 
 const chaseLight=new THREE.DirectionalLight(0xb9dbff,.8);scene.add(chaseLight);scene.add(chaseLight.target);

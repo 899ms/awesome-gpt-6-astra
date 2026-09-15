@@ -57,3 +57,11 @@ Validation: 49 tests including countdown input, held-key release, alias overlap,
 Map selection swaps cached route geometry in the existing renderer instead of navigating/reloading the document. Track meshes, decorations, gate layout, collision samples, pickup positions, minimap and record context change together. The garage, selected kart/team, settings and lobby scroll remain in place. Only Bay and Citadel are cached; revisiting a map reuses its assets and preview. URL history supports Back/Forward, including cancelling a pending launch before switching back.
 
 Validation: desktop and 390 × 844 browser checks for repeated Bay/Citadel selection, retained car/team and lobby state, Back navigation and actual Citadel race launch. Three route-switch regression tests cover cache reuse, inactive visibility, geometry/URL updates and race/launch guards. No physical-phone memory or GPU benchmark was performed.
+
+## Vehicle surface and geometry refinement
+
+All six karts share clearer paint/metal/rubber/seat/visor material separation and a multi-panel reflection environment. The five road-kart variants now have a tapered nose, distinct lower splitter and side pods, open cockpit, upholstered seat and harness, deeper rims, brake rotors, stationary calipers and tire grooves. Wheel assemblies rotate around the axle together, while calipers stay attached to the steering hub. Repeated spokes, bolts and tread details use instancing. The showroom frames smaller road karts more closely.
+
+TITAN keeps turquoise armor with team-colored trim. It adds layered rear fender panels, deeper projector headlights, rounded tire sidewalls, recessed brakes and rim lips, exhaust collars and a rear diffuser. Garage finish controls target explicit body-paint metadata rather than a fragile roughness value. The GLB exporter resolves the shared finish module and remains usable.
+
+Validation: 52 existing regression tests passed. Static build and TITAN GLB export passed (about 2.55 MB, finite geometry). Road wheel position/normal buffers were checked for finite values; spokes and bolts render as instances. Desktop visual checks covered TITAN front-quarter/rear/paint switching, APEX showroom and SLIDE race launch; no console errors. Physical-phone frame rate and memory were not benchmarked.
