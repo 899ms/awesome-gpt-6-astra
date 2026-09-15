@@ -17,15 +17,51 @@ Object.assign(dictionary,{
 });
 Object.assign(dictionary,{
 'YOUR MACHINE. YOUR SIGNATURE.':'你的座驾，你的风格。','PERSONAL WORKSHOP / 06 KARTS':'专属改装车间 / 6 款赛车','Make it yours.':'打造你的专属赛车','Body & livery':'车漆与涂装','Restore this car':'还原当前车辆','Body color':'整车颜色','Paint finish':'车漆质感','Gloss':'亮光漆','Satin':'缎面漆','Metallic':'金属漆','Solid':'纯色','Twin stripes':'双条纹','Circuit checks':'赛道格纹','Livery color':'拉花颜色','Exhaust effects':'尾焰改装','Test boost':'预览加速尾焰','Stop boost preview':'停止尾焰预览','Tail flame':'尾焰样式','Jet':'喷射','Pulse':'脉冲','Off':'关闭','Flame color':'尾焰颜色','Visual upgrades only. Speed and handling stay the same.':'外观改装不影响速度与操控性能。','Preview settings':'展示设置','Saved on this device · Ready to race':'已保存在此设备 · 比赛中自动使用','Preview only · Browser could not save changes':'仅预览 · 浏览器无法保存改装'});
-let language='en';try{language=localStorage.getItem('apex-language')||(navigator.language.startsWith('zh')?'zh':'en');}catch{}
-export function tr(text){if(language!=='zh')return text;const s=text.trim();if(dictionary[s])return text.replace(s,dictionary[s]);
- return text.replace(/Armored buggy|Lightweight|All-rounder|Speedster|Drift specialist|Classic/g,x=>({'Armored buggy':'装甲越野车',Lightweight:'轻量型','All-rounder':'全能型',Speedster:'极速型','Drift specialist':'漂移专家',Classic:'经典型'}[x])).replace(/EXIT BOOST|CUT BOOST|AIR BOOST|LAND BOOST|PERSONAL BEST|NEW PERSONAL BEST|TEAMMATE|RIVAL|READY|FINISH|WAIT FOR WINDOW/g,x=>dictionary[x]||x).replace(/PRESS E/g,'按 E').replace(/TAP MINI/g,'点击小喷').replace(/CHAIN /g,'连喷 ').replace(/EMP: (\d+) TARGETS/g,'EMP：$1 位对手在范围内').replace(/COOLDOWN ([\d.]+)s/g,'冷却 $1 秒').replace(/EMP HIT: (\d+)/g,'EMP 命中：$1').replace(/NO TARGETS/g,'范围内无对手').replace(/LAP BEST/g,'最佳圈速').replace(/SECTOR ([1-6])/g,'分段 $1').replace(/BRAKE · /g,'减速 · ').replace(/LEFT TURN/g,'左弯').replace(/RIGHT TURN/g,'右弯').replace(/GOLD/g,'金牌').replace(/SILVER/g,'银牌').replace(/BRONZE/g,'铜牌').replace(/Collisions/g,'碰撞').replace(/Drifts/g,'漂移').replace(/Mini boosts/g,'小喷').replace(/Best medal/g,'最佳奖牌').replace(/Recovery avg/g,'平均脱困用时').replace(/Your position: P/g,'你的名次：P').replace(/Points awarded to finishers/g,'完赛车手获得积分').replace(/3 laps/g,'3 圈').replace(/Waiting for racers/g,'等待其他车手').replace(/remaining/g,'剩余');
+export const LANGUAGE_KEY='apex-language';
+let language='en';try{language=localStorage.getItem(LANGUAGE_KEY)==='zh'?'zh':'en';}catch{}
+let refreshLanguage=()=>{},initialized=false;
+const sourceByTranslation=new Map();
+export function getLanguage(){return language;}
+export function setLanguage(value,{persist=true}={}){language=value==='zh'?'zh':'en';if(persist)try{localStorage.setItem(LANGUAGE_KEY,language);}catch{}refreshLanguage();}
+
+function translateChinese(text){const s=text.trim();if(dictionary[s])return text.replace(s,dictionary[s]);
+ return text.replace(/Previous car|Next car/g,x=>dictionary[x]).replace(/Armored buggy|Lightweight|All-rounder|Speedster|Drift specialist|Classic/g,x=>({'Armored buggy':'装甲越野车',Lightweight:'轻量型','All-rounder':'全能型',Speedster:'极速型','Drift specialist':'漂移专家',Classic:'经典型'}[x])).replace(/EXIT BOOST|CUT BOOST|AIR BOOST|LAND BOOST|PERSONAL BEST|NEW PERSONAL BEST|TEAMMATE|RIVAL|READY|FINISH|WAIT FOR WINDOW/g,x=>dictionary[x]||x).replace(/PRESS E/g,'按 E').replace(/TAP MINI/g,'点击小喷').replace(/CHAIN /g,'连喷 ').replace(/EMP: (\d+) TARGETS/g,'EMP：$1 位对手在范围内').replace(/COOLDOWN ([\d.]+)s/g,'冷却 $1 秒').replace(/EMP HIT: (\d+)/g,'EMP 命中：$1').replace(/NO TARGETS/g,'范围内无对手').replace(/LAP BEST/g,'最佳圈速').replace(/SECTOR ([1-6])/g,'分段 $1').replace(/BRAKE · /g,'减速 · ').replace(/LEFT TURN/g,'左弯').replace(/RIGHT TURN/g,'右弯').replace(/GOLD/g,'金牌').replace(/SILVER/g,'银牌').replace(/BRONZE/g,'铜牌').replace(/Collisions/g,'碰撞').replace(/Drifts/g,'漂移').replace(/Mini boosts/g,'小喷').replace(/Best medal/g,'最佳奖牌').replace(/Recovery avg/g,'平均脱困用时').replace(/Your position: P/g,'你的名次：P').replace(/Points awarded to finishers/g,'完赛车手获得积分').replace(/3 laps/g,'3 圈').replace(/Waiting for racers/g,'等待其他车手').replace(/remaining/g,'剩余');
 }
+export function tr(text){
+ if(language!=='zh')return text;
+ const translated=translateChinese(text);
+ if(translated!==text){sourceByTranslation.set(translated,text);if(sourceByTranslation.size>1500)sourceByTranslation.delete(sourceByTranslation.keys().next().value);}
+ return translated;
+}
+// Keep the English source for every rendered node so switching never reloads a race.
+const reverseEntries=Object.entries(dictionary).sort((a,b)=>b[1].length-a[1].length);
+function englishSource(text){if(sourceByTranslation.has(text))return sourceByTranslation.get(text);if(!/[\u3400-\u9fff]/.test(text))return text;let result=text;for(const [en,zh]of reverseEntries)result=result.split(zh).join(en);return result;}
 export function setupLanguage(){
- const select=document.querySelector('#languageSetting');if(select)select.value=language;
- const originals=new WeakMap(),translated=new WeakMap();
- function visit(node){if(node.nodeType===3){const current=node.nodeValue;if(current===translated.get(node))return;const source=originals.get(node);const raw=current===source?source:current;originals.set(node,raw);const next=tr(raw);translated.set(node,next);if(next!==current)node.nodeValue=next;}else if(node.nodeType===1&&!['SCRIPT','STYLE','CANVAS'].includes(node.tagName)){for(const child of node.childNodes)visit(child);}}
- visit(document.body);document.documentElement.lang=language==='zh'?'zh-CN':'en';
- const observer=new MutationObserver(records=>{for(const r of records){if(r.type==='characterData')visit(r.target);else for(const n of r.addedNodes)visit(n);}});observer.observe(document.body,{subtree:true,childList:true,characterData:true});
- select?.addEventListener('change',()=>{try{localStorage.setItem('apex-language',select.value);}catch{}location.reload();});
+ if(initialized){refreshLanguage();return;}initialized=true;
+ const originals=new WeakMap(),rendered=new WeakMap(),attributes=new WeakMap();
+ function visit(node,force=false){
+  if(node.nodeType===3){
+   const current=node.nodeValue,own=current===rendered.get(node);if(own&&!force)return;
+   const source=own?originals.get(node):englishSource(current);originals.set(node,source);
+   const next=tr(source);rendered.set(node,next);if(next!==current)node.nodeValue=next;
+  }else if(node.nodeType===1&&!['SCRIPT','STYLE'].includes(node.tagName)&&!node.hasAttribute('data-no-translate')){
+   const saved=attributes.get(node)||{};
+   for(const name of ['aria-label','title','placeholder'])if(node.hasAttribute(name)){
+    const current=node.getAttribute(name),previous=saved[name],source=previous&&current===previous.rendered?previous.source:englishSource(current),next=tr(source);
+    saved[name]={source,rendered:next};if(next!==current)node.setAttribute(name,next);
+   }
+   attributes.set(node,saved);for(const child of node.childNodes)visit(child,force);
+  }
+ }
+ refreshLanguage=()=>{
+  visit(document.body,true);document.documentElement.lang=language==='zh'?'zh-CN':'en';
+  document.querySelectorAll('[data-language]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.language===language)));
+  const select=document.querySelector('#languageSetting');if(select)select.value=language;
+ };
+ refreshLanguage();
+ const observer=new MutationObserver(records=>{for(const r of records){if(r.type==='characterData'||r.type==='attributes')visit(r.target);else for(const n of r.addedNodes)visit(n);}});
+ observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-label','title','placeholder']});
+ document.querySelectorAll('[data-language]').forEach(button=>button.addEventListener('click',()=>setLanguage(button.dataset.language)));
+ document.querySelector('#languageSetting')?.addEventListener('change',e=>setLanguage(e.target.value));
+ addEventListener('storage',e=>{if(e.key===LANGUAGE_KEY||e.key===null)setLanguage(e.newValue,{persist:false});});
 }
