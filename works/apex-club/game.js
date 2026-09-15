@@ -1,4 +1,7 @@
-import {vehicleMaterials,bevelGeometry,sportWheel,createVehicleEnvironment} from './vehicle-finish.js';
+import {createVehicleEnvironment} from './vehicle-finish.js';
+import {makeCraft,configureKart} from './kart-model.js';
+import {applyCustomization,animateExhaust} from './kart-customization.js';
+import {readGarage,GARAGE_KEY} from './garage-config.js';
 import {loadBindings,createKeyboardState,formatKeys} from './keyboard-controls.js';
 import {mountKeyboardSettings} from './keyboard-settings.js';
 import {setupLanguage,tr} from './localization.js';
@@ -8,7 +11,6 @@ import {createPickupFactory} from './pickup-design.js';
 import {JUMP_RAMPS,RAMP_LENGTH,rampHeight,createStunts,offerDrift,stepStunts,boostOpportunity,fireStunt} from './stunt-model.js';
 import {createShowroom,createCitadel} from './scene-design.js';
 import {createMobileControls,isHandheldDevice} from './mobile-controls.js';
-import {createArmoredKart} from './armored-kart.js';
 import {stepHandling, projectTrack, resolveTrackContact, progressDelta, DISTANCE_SCALE, DISPLAY_SPEED} from './driving-model.js';
 import {createRaceEffects} from './race-effects.js';
 import {createRaceAudio} from './race-audio.js';
@@ -219,115 +221,8 @@ starGeo.setAttribute('position',new THREE.BufferAttribute(arr,3));
 scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({size:1.5,color:0x7dfcff,transparent:true,opacity:.32,blending:THREE.AdditiveBlending,depthWrite:false})));
 
 let craftIndex=4;
-function makeCraft(color=0xffb24c,scale=1){
-  const g=new THREE.Group(),model=new THREE.Group();g.add(model);
-  const surfaces=vehicleMaterials(color),{paint,rubber,metal,dark,seat,glass,lens}=surfaces;
-  function box(w,h,d,x,y,z,mat=paint){const m=new THREE.Mesh(bevelGeometry(w,h,d,Math.min(.18,h*.22)),mat);m.position.set(x,y,z);model.add(m);return m;}
-  function round(w,h,d,x,y,z,mat=paint){const m=new THREE.Mesh(new THREE.SphereGeometry(1,20,12),mat);m.scale.set(w,h,d);m.position.set(x,y,z);model.add(m);return m;}
-  box(8.6,1.3,12,0,-1.8,0,dark);
-  // Sculpted nose and side pods leave a real cockpit opening instead of a solid oval body.
-  function shell(outline,y,depth,mat=paint){const shape=new THREE.Shape();outline.forEach(([x,z],i)=>i?shape.lineTo(x,-z):shape.moveTo(x,-z));shape.closePath();const geo=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSegments:3,bevelSize:.28,bevelThickness:.22,steps:1});geo.rotateX(-Math.PI/2);const m=new THREE.Mesh(geo,mat);m.position.y=y;model.add(m);return m;}
-  shell([[-3.1,7.8],[-4.4,5.6],[-3.6,2.1],[3.6,2.1],[4.4,5.6],[3.1,7.8]],-.9,1.35);
-  shell([[-3.4,7.95],[-4.6,5.7],[-4,2],[4,2],[4.6,5.7],[3.4,7.95]],-1.28,.23,dark);
-  for(const side of [-1,1]){
-   box(1.7,1.25,6.6,side*3.85,-.35,-1.1);box(.2,.7,4.8,side*4.72,-.3,-1.4,dark);
-   for(let i=0;i<5;i++)box(.25,.08,.38,side*4.86,-.12,-2.8+i*.68,metal);
-   box(.14,.11,3.8,side*2.5,.71,4.7,metal);box(.6,.18,1.8,side*3.6,.75,3.3,dark);
-   box(.8,.18,.26,side*3.2,-.72,7.95,metal);
-  }
-  box(3,.22,2,0,.68,2.9,dark);for(let i=0;i<5;i++)box(2.6,.06,.12,0,.83,2.15+i*.36,metal);
-  box(.6,.15,6.5,0,.77,4.7,metal);
-  box(9.6,.7,1.0,0,-1.35,7.9,dark);
-  const wheels=[],fins=[],engines=[],spoilers=[];
-  for(const side of [-1,1]){
-    for(const z of [-4.4,4.6]){
-      const hub=new THREE.Group();hub.position.set(side*5.5,-1.4,z);model.add(hub);
-      const tire=sportWheel(surfaces,side);hub.add(tire,tire.userData.caliper);
-      wheels.push({hub,tire,front:z>0});
-    }
-    box(1.1,.24,4.4,side*4,.41,-1.2);
-    spoilers.push(box(.28,3.8,.4,side*3.5,1.25,-5.8,dark));
-    const end=box(.3,1.2,2.2,side*5.2,3,-5.8);fins.push(end);spoilers.push(end);
-    const lamp=new THREE.Mesh(new THREE.SphereGeometry(.48,12,8),lens);lamp.scale.set(1.8,.55,.6);lamp.position.set(side*3,.1,7);model.add(lamp);
-    box(1.5,.38,.3,side*3.4,-.25,-6.7,new THREE.MeshBasicMaterial({color:0xff6755}));
-    const exhaust=new THREE.Mesh(new THREE.CylinderGeometry(.6,.72,1.7,12),metal);exhaust.rotation.x=Math.PI/2;exhaust.position.set(side*2.1,-1.4,-7);model.add(exhaust);
-    const flameMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,
-      uniforms:{tint:{value:new THREE.Color(0x57bfff)},time:{value:0},power:{value:.4}},
-      vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-      fragmentShader:`varying vec2 vUv;uniform vec3 tint;uniform float time;uniform float power;void main(){float a=pow(1.-vUv.y,1.8)*(.85+.15*sin(vUv.y*30.-time*35.));gl_FragColor=vec4(mix(tint,vec3(.9,1.,1.),pow(1.-vUv.y,5.))*1.6,a*.8);}`});
-    const flame=new THREE.Mesh(new THREE.ConeGeometry(.6,1,14,6,true),flameMat);flame.rotation.x=-Math.PI/2;flame.position.set(side*2.1,-1.4,-8);model.add(flame);engines.push(flame);
-  }
-  spoilers.push(box(10.5,.5,2.4,0,2.6,-5.8));
-  spoilers.push(box(6.5,.12,1.5,0,2.9,-5.8,metal));
-  // Driver, seat, helmet and dark visor make the kart scale immediately legible.
-  box(3.5,1,3.7,0,-.2,-1.7,seat);
-  box(3.25,3,.55,0,1,-3.15,seat);
-  for(const side of [-1,1]){box(.38,2.1,2.9,side*1.65,.3,-1.9,seat);box(.26,2.1,.1,side*.72,1.35,-2.82,paint);}
-  for(let i=0;i<6;i++)box(2.2,.035,.035,0,.5,-2.8+i*.42,dark);
-  round(1.5,1.7,1.2,0,2,-1.2,seat);
-  round(1.85,1.8,1.8,0,4.3,-.8,new THREE.MeshPhysicalMaterial({color:0xf3f0e3,roughness:.24,clearcoat:1}));
-  for(const side of [-1,1]){round(.4,.45,.28,side*1.65,4.3,-.3,metal);box(.18,1.6,.15,side*.65,2.1,.03,metal);round(.5,.45,.5,side*1.2,2,1.8,paint);}
-  round(1.6,.65,.8,0,4.4,.5,glass);
-  // Helmet band and rear vents remain readable from the chase camera.
-  for(const side of [-1,1]){box(.12,.44,1.2,side*.58,5.75,-.7,dark);box(.12,.25,.5,side*.55,4.5,-2.55,dark);}
-  const helmetBand=new THREE.Mesh(new THREE.TorusGeometry(1.68,.06,6,40),metal);helmetBand.rotation.x=Math.PI/2;helmetBand.position.set(0,3.83,-.8);model.add(helmetBand);
-  const steering=new THREE.Mesh(new THREE.TorusGeometry(1.15,.16,8,16),dark);steering.rotation.x=-.65;steering.position.set(0,1.8,1.6);model.add(steering);
-  for(const side of [-1,1])round(.48,.48,1.3,side*1.2,1.9,.7,dark);
-  // Reusable body kits can be switched without rebuilding or leaking GPU resources.
-  const kits={drift:new THREE.Group(),rally:new THREE.Group(),retro:new THREE.Group()};
-  for(const kit of Object.values(kits)){model.add(kit);kit.visible=false;}
-  kits.drift.add(box(11.4,.3,2.8,0,-1.4,7.2,dark));
-  kits.drift.add(box(11.7,.38,2.5,0,4,-5.8,paint));
-  for(const side of [-1,1]){
-    kits.drift.add(box(.35,2,2.8,side*5.7,3.2,-5.8,dark));
-    kits.drift.add(box(1.5,.55,8,side*4.8,-1.1,.2,paint));
-    kits.drift.add(box(.18,.12,6.5,side*4.9,-.77,.2,metal));
-    kits.rally.add(box(.4,6.5,.4,side*3.1,2,-2.8,dark));
-    kits.rally.add(box(.4,5,.4,side*3.1,1,1.5,dark));
-    kits.rally.add(box(.4,.4,4.6,side*3.1,5.1,-.7,dark));
-    kits.rally.add(round(.9,.9,.55,side*2.3,5.4,1.55,metal));
-    kits.rally.add(round(.65,.65,.2,side*2.3,5.4,2,new THREE.MeshBasicMaterial({color:0xffe9a3})));
-    kits.rally.add(box(1.6,1,7,side*4.9,-.65,.5,paint));
-    kits.retro.add(round(.85,.85,.55,side*3.5,.6,7.45,metal));
-    kits.retro.add(round(.64,.64,.2,side*3.5,.6,7.9,new THREE.MeshBasicMaterial({color:0xfff3d1})));
-    kits.retro.add(box(.18,.2,10,side*4.4,.2,.3,metal));
-  }
-  kits.rally.add(box(6.5,.4,.4,0,5.1,-2.8,dark));
-  kits.rally.add(box(6.5,.4,.4,0,5.1,1.5,dark));
-  kits.rally.add(box(10,.65,1.4,0,-.7,8.3,metal));
-  kits.retro.add(round(2.5,1.25,1,0,.1,7.7,dark));
-  for(let n=-3;n<=3;n++)kits.retro.add(box(.14,1.6,.2,n*.6,.1,8.6,metal));
-  kits.retro.add(box(9.7,.48,.7,0,-1.1,8.8,metal));
-  kits.retro.add(round(4.2,.65,1.8,0,.2,-5.5,paint));
-  const shadow=new THREE.Mesh(new THREE.PlaneGeometry(18,23),new THREE.ShaderMaterial({transparent:true,depthWrite:false,vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`varying vec2 vUv;void main(){float d=length((vUv-.5)*2.);gl_FragColor=vec4(.015,.04,.05,(1.-smoothstep(.3,1.,d))*.55);}`}));
-  shadow.rotation.x=-Math.PI/2;shadow.position.y=-3.4;g.add(shadow);
-  g.userData={model,engines,fins,shadow,wheels,kits,spoilers,legacy:{model,engines,wheels}};g.scale.setScalar(scale);return g;
-}
-function configureKart(kart,definition){
-  const data=kart.userData;
-  if(definition.style==='rally'){
-    if(!data.armored){data.armored=createArmoredKart();kart.add(data.armored);}
-    data.legacy.model.visible=false;data.armored.visible=true;
-    data.model=data.armored;data.engines=data.armored.userData.engines;data.wheels=data.armored.userData.wheels;data.fx=data.armored.userData.fx;
-    data.shadow.scale.set(1.15,1.12,1);return;
-  }
-  if(data.armored)data.armored.visible=false;
-  Object.assign(data,data.legacy);data.model.visible=true;data.fx=null;data.shadow.scale.set(1,1,1);
-  kart.userData.model.scale.set(...definition.scale);
-  Object.entries(kart.userData.kits).forEach(([style,kit])=>{kit.visible=style===definition.style;});
-  kart.userData.spoilers.forEach(part=>{part.visible=definition.style!=='retro';});
-  kart.userData.wheels.forEach(w=>{
-    w.hub.scale.setScalar(definition.style==='rally'?1.13:1);
-    w.hub.position.y=definition.style==='rally'?-1.12:-1.4;
-  });
-}
 function animateCraft(craft,time,power,boosting=false,drifting=false,steer=0){
-  craft.userData.engines.forEach((flame,i)=>{
-    const length=(boosting?24:1+power*1.4)*(1+Math.sin(time*39+i)*.07);
-    flame.scale.set(boosting?1.5:1,length,boosting?1.5:1);flame.position.z=(flame.userData.nozzleZ??-7.8)-length*.5;
-    flame.material.uniforms.tint.value.setHex(craft===player&&state.miniTurbo>0&&state.nitro<=0?0xffad42:0x43cfff);
-    flame.material.uniforms.time.value=time;flame.material.uniforms.power.value=power;
-  });
+  animateExhaust(craft,time,power,boosting,craft===player&&state.miniTurbo>0&&state.nitro<=0);
   craft.userData.wheels.forEach(w=>{w.hub.rotation.y=w.front?-steer*.35:0;w.tire.rotation.x=time*power*-8;});
 }
 const player=makeCraft(craftDefs[craftIndex].color,1); scene.add(player);
@@ -375,11 +270,11 @@ function updateSpeedFX(time,meta){
 streaks.frustumCulled=false;
 const msg=document.querySelector('#centerMsg'), flash=document.querySelector('#flash');
 function ping(text,color='#fff'){msg.textContent=text;msg.style.color=color;msg.style.opacity=1;setTimeout(()=>msg.style.opacity=0,520)}
-function colorKart(kart,color){if(kart===player&&selectedMode==='solo'&&document.querySelector('#liverySetting').value==='reward'){try{if(Number(localStorage.getItem('apex-medal'))>=1)color=0xdab16b;}catch{}}kart.traverse(o=>{if(o.material?.userData.craftColor)o.material.color.setHex(color);});}
+function colorKart(kart,color){if(kart===player&&selectedMode==='solo'&&document.querySelector('#liverySetting').value==='reward'){try{if(Number(localStorage.getItem('apex-medal'))>=1)color=0xdab16b;}catch{}}kart.traverse(o=>{if(o.material?.userData.craftColor)o.material.color.setHex(color);});if(kart===player)applyCustomization(kart,readGarage().cars[craftIndex],craftDefs[craftIndex].style==='rally'?0x1497a0:color);}
 function setCraft(i){
   if(race&&race.phase!=='finished')return;
   if(!Number.isInteger(i)||!craftDefs[i])return;
-  craftIndex=i;const d=craftDefs[i];configureKart(player,d);showroom.select();
+  craftIndex=i;document.querySelector('.lobby-tools a').href=`./garage.html?craft=${i}&scene=${requestedScene}`;const d=craftDefs[i];configureKart(player,d);showroom.select();
   document.querySelector('#heroKartName').textContent=d.name;document.querySelector('#heroKartType').textContent=d.title;updateLobbyRecord();
   colorKart(player,selectedMode==='team'?TEAM_COLORS[selectedTeam]:d.color);
   document.querySelectorAll('[data-craft]').forEach(el=>{const active=Number(el.dataset.craft)===i;el.classList.toggle('active',active);el.setAttribute('aria-pressed',String(active));});
@@ -644,7 +539,7 @@ function selectScene(name,{historyMode='push'}={}){
  [...bayTrackObjects,...bayDecor,sea].forEach(o=>o.visible=!ancient);
  scene.background.set(ancient?0xc9baa0:0x83bed8);scene.fog.color.set(ancient?0x9cabb7:0xa8d3e5);scene.fog.density=ancient?.00036:.00022;
  dir.color.set(ancient?0xffd49b:0xffedc9);ambientLight.color.set(ancient?0xa7bfd9:0xdbefff);
- scene.traverse(o=>{if(o.isMesh&&o.material?.isMeshStandardMaterial&&!o.material.transparent){o.castShadow=true;o.receiveShadow=true;}});ghost.traverse(o=>o.castShadow=false);
+ scene.traverse(o=>{if(o.userData.cosmeticDecal){o.castShadow=false;o.receiveShadow=false;}else if(o.isMesh&&o.material?.isMeshStandardMaterial&&!o.material.transparent){o.castShadow=true;o.receiveShadow=true;}});ghost.traverse(o=>o.castShadow=false);
  trackMat.uniforms.citadel.value=ancient?1:0;
  document.body.dataset.scene=selectedScene;
  document.querySelectorAll('button[data-scene]').forEach(b=>{const on=b.dataset.scene===selectedScene;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
@@ -656,6 +551,7 @@ function selectScene(name,{historyMode='push'}={}){
   try{sessionStorage.setItem('apex-lobby-choice',JSON.stringify({craft:craftIndex,mode:selectedMode,team:selectedTeam}));}catch{}
   const url=new URL(location.href);url.searchParams.set('scene',name);
   if(historyMode==='push')history.pushState(null,'',url);
+  document.querySelector('.lobby-tools a').href=`./garage.html?craft=${craftIndex}&scene=${requestedScene}`;
   updateScenePreview();updateLobbyRecord();
  }
 
@@ -844,7 +740,7 @@ function setupClubLobby(){
  }
  const miniScene=new THREE.Scene();miniScene.background=new THREE.Color(0x102635);miniScene.environment=scene.environment;miniScene.add(new THREE.HemisphereLight(0xd8efff,0x293646,2));const light=new THREE.DirectionalLight(0xffe8c6,3);light.position.set(12,22,18);miniScene.add(light);
  const miniCamera=new THREE.PerspectiveCamera(38,216/124,.1,150);miniCamera.position.set(26,16,35);miniCamera.lookAt(0,0,0);const kart=makeCraft(0xffffff,1);miniScene.add(kart);
- for(let i=0;i<craftDefs.length;i++){configureKart(kart,craftDefs[i]);colorKart(kart,craftDefs[i].color);document.querySelector(`[data-craft="${i}"] img`).src=snapshot(miniScene,miniCamera,216,124);}
+ for(let i=0;i<craftDefs.length;i++){configureKart(kart,craftDefs[i]);colorKart(kart,craftDefs[i].color);applyCustomization(kart,readGarage().cars[i],craftDefs[i].style==='rally'?0x1497a0:craftDefs[i].color);document.querySelector(`[data-craft="${i}"] img`).src=snapshot(miniScene,miniCamera,216,124);}
  const geometries=new Set(),materials=new Set();kart.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)materials.add(o.material);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());
  updateScenePreview();
  updateLobbyRecord();
@@ -867,6 +763,7 @@ applyQuality();
 renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();toggleControls(true);document.querySelector('#runtimeError').hidden=false;});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&race?.phase==='racing')toggleControls(true);});
 try{const choice=JSON.parse(sessionStorage.getItem('apex-lobby-choice')||'null');if(choice&&craftDefs[choice.craft]){craftIndex=choice.craft;selectedMode=choice.mode==='solo'?'solo':'team';selectedTeam=choice.team==='red'?'red':'blue';document.querySelectorAll('[data-mode]').forEach(b=>{const on=b.dataset.mode===selectedMode;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});document.querySelectorAll('[data-team]').forEach(b=>{const on=b.dataset.team===selectedTeam;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});document.querySelector('#teamChoice').hidden=selectedMode==='solo';}}catch{}
+const garageChoice=new URLSearchParams(location.search).get('craft');if(garageChoice!==null&&/^[0-5]$/.test(garageChoice))craftIndex=Number(garageChoice);
 setCraft(craftIndex);
 selectScene(requestedScene);
 setupExperience();
@@ -886,3 +783,6 @@ document.querySelectorAll('[data-settings]').forEach(button=>button.addEventList
  document.querySelectorAll('[data-settings-panel]').forEach(panel=>panel.hidden=panel.dataset.settingsPanel!==button.dataset.settings);
  if(button.dataset.settings==='driver')showDriver();
 }));
+
+document.querySelector('.lobby-tools a').addEventListener('click',()=>{try{sessionStorage.setItem('apex-lobby-choice',JSON.stringify({craft:craftIndex,mode:selectedMode,team:selectedTeam}));}catch{}});
+addEventListener('storage',e=>{if(e.key===GARAGE_KEY&&!race)setCraft(craftIndex);});
